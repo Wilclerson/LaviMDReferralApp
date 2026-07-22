@@ -1,0 +1,315 @@
+// LaviMD Partner Network — PostgreSQL schema.
+// Domain contracts live in @lavimd/shared; these enums mirror them exactly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  super_admin
+  administrator
+  partner
+  customer
+}
+
+enum PermissionEffect {
+  allow
+  deny
+}
+
+enum PartnerCategory {
+  personal_trainer
+  hairstylist
+  esthetician
+  barber
+  wellness_coach
+  massage_therapist
+  chiropractor
+  gym
+  influencer
+}
+
+enum PartnerStatus {
+  pending
+  active
+  suspended
+  deactivated
+}
+
+enum ReferralStatus {
+  pending
+  signed_up
+  converted
+  expired
+  cancelled
+}
+
+enum ReferralChannel {
+  link
+  code
+  content
+  invite
+}
+
+enum TransactionSource {
+  manual
+  csv
+  api
+  webhook
+}
+
+enum SettlementStatus {
+  pending
+  settled
+  failed
+}
+
+enum CommissionStatus {
+  pending_review
+  approved
+  rejected
+  paid
+  reversed
+}
+
+enum CommissionCalcType {
+  percentage
+  flat
+  hybrid
+}
+
+enum CommissionPlanStatus {
+  draft
+  active
+  archived
+}
+
+enum LedgerEntryType {
+  commission_accrued
+  commission_reversed
+  payout
+}
+
+enum AuditAction {
+  partner_approved
+  partner_suspended
+  commission_approved
+  commission_rejected
+  commission_reversed
+  payout_created
+  payout_approved
+  payout_cancelled
+  commission_plan_changed
+  role_changed
+  permission_changed
+  attribution_overridden
+  transaction_imported_manually
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  /// Set for partner users: the partner record this user owns.
+  partnerId    String?  @unique @db.Uuid
+  partner      Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  permissionGrants PermissionGrant[]
+  auditEntries     AuditLog[]        @relation("AuditActor")
+  approvedCommissions Commission[]   @relation("CommissionApprover")
+
+  @@index([role])
+}
+
+/// Per-user permission overrides on top of the role defaults. Empty today —
+/// this is what lets permissions become individually configurable later
+/// without changing enforcement code (deny always wins).
+model PermissionGrant {
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @db.Uuid
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  effect     PermissionEffect
+  createdAt  DateTime         @default(now())
+
+  @@unique([userId, permission])
+  @@index([userId])
+}
+
+model Partner {
+  id           String          @id @default(uuid()) @db.Uuid
+  displayName  String
+  category     PartnerCategory
+  email        String          @unique
+  referralCode String          @unique
+  status       PartnerStatus   @default(pending)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  user         User?
+  referrals    Referral[]
+  commissions  Commission[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([status])
+  @@index([category])
+}
+
+/// A referral is a marketing attribution touch: a customer arrived via a
+/// partner's link/code. Last-click attribution picks the newest touch inside
+/// the attribution window.
+model Referral {
+  id           String          @id @default(uuid()) @db.Uuid
+  partnerId    String          @db.Uuid
+  partner      Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  referralCode String
+  channel      ReferralChannel @default(link)
+  /// Opaque, non-PHI reference to the invited customer.
+  customerRef  String?
+  status       ReferralStatus  @default(pending)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  transactions Transaction[]
+  commissions  Commission[]
+
+  @@index([partnerId])
+  @@index([customerRef])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Transaction {
+  id               String            @id @default(uuid()) @db.Uuid
+  referralId       String            @db.Uuid
+  referral         Referral          @relation(fields: [referralId], references: [id], onDelete: Restrict)
+  source           TransactionSource
+  /// Opaque identifier from the source system (order id, etc.).
+  externalRef      String?
+  amountMinor      Int
+  currency         String            @db.Char(3)
+  occurredAt       DateTime
+  settlementStatus SettlementStatus  @default(pending)
+  refunded         Boolean           @default(false)
+  chargedBack      Boolean           @default(false)
+  cancelled        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  commissions Commission[]
+
+  @@unique([source, externalRef])
+  @@index([referralId])
+  @@index([occurredAt])
+}
+
+/// An immutable version of a commission plan. Editing creates a new version
+/// under the same planKey; commissions reference the exact version used.
+model CommissionPlan {
+  id        String               @id @default(uuid()) @db.Uuid
+  planKey   String               @db.Uuid
+  version   Int
+  name      String
+  status    CommissionPlanStatus @default(draft)
+  currency  String               @db.Char(3)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  levels      CommissionRule[]
+  commissions Commission[]
+
+  @@unique([planKey, version])
+  @@index([status])
+}
+
+model CommissionRule {
+  id              String             @id @default(uuid()) @db.Uuid
+  planId          String             @db.Uuid
+  plan            CommissionPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  level           Int
+  calcType        CommissionCalcType
+  /// Basis points (1% = 100). Required for percentage/hybrid.
+  rateBasisPoints Int?
+  /// Minor units. Required for flat/hybrid.
+  flatAmountMinor Int?
+
+  @@unique([planId, level])
+}
+
+model Commission {
+  id                    String           @id @default(uuid()) @db.Uuid
+  partnerId             String           @db.Uuid
+  partner               Partner          @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  referralId            String           @db.Uuid
+  referral              Referral         @relation(fields: [referralId], references: [id], onDelete: Restrict)
+  transactionId         String           @db.Uuid
+  transaction           Transaction      @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  planId                String           @db.Uuid
+  plan                  CommissionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planVersion           Int
+  level                 Int
+  eligibleAmountMinor   Int
+  commissionAmountMinor Int
+  currency              String           @db.Char(3)
+  status                CommissionStatus @default(pending_review)
+  approvedById          String?          @db.Uuid
+  approvedBy            User?            @relation("CommissionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@unique([transactionId, level])
+  @@index([partnerId])
+  @@index([status])
+}
+
+/// Append-only financial ledger. Rows are never updated or deleted; a reversal
+/// is a new, opposite-signed entry.
+model LedgerEntry {
+  id          String          @id @default(uuid()) @db.Uuid
+  type        LedgerEntryType
+  partnerId   String          @db.Uuid
+  partner     Partner         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  /// Signed minor units: positive credits the partner, negative debits.
+  amountMinor Int
+  currency    String          @db.Char(3)
+  /// Id of the entity this entry records (commission id, payout id).
+  referenceId String
+  occurredAt  DateTime
+  createdAt   DateTime        @default(now())
+
+  @@index([partnerId])
+  @@index([referenceId])
+}
+
+/// Immutable audit trail of every sensitive administrator action. Append-only:
+/// no update or delete path is exposed anywhere in the application.
+model AuditLog {
+  id            String      @id @default(uuid()) @db.Uuid
+  action        AuditAction
+  actorUserId   String      @db.Uuid
+  actor         User        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorRole     Role
+  /// Request IP when available (IPv4/IPv6); null when it cannot be determined.
+  ip            String?     @db.VarChar(45)
+  entityType    String
+  entityId      String
+  previousValue Json?
+  newValue      Json?
+  reason        String
+  occurredAt    DateTime    @default(now())
+
+  @@index([action])
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([occurredAt])
+}

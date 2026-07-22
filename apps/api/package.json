@@ -1,0 +1,56 @@
+{
+  "name": "@lavimd/api",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src prisma --max-warnings 0",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "clean": "rimraf dist coverage .turbo"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@lavimd/shared": "workspace:*",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.0.2",
+    "@prisma/client": "^6.2.1",
+    "bcryptjs": "^2.4.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@lavimd/eslint-config": "workspace:*",
+    "@lavimd/tsconfig": "workspace:*",
+    "@nestjs/testing": "^11.0.1",
+    "@swc/core": "^1.10.7",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/supertest": "^6.0.2",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.17.0",
+    "prisma": "^6.2.1",
+    "rimraf": "^6.0.1",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "unplugin-swc": "^1.5.1",
+    "vitest": "^2.1.8"
+  }
+}

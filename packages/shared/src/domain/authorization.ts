@@ -74,7 +74,14 @@ export const PERMISSIONS = [
   "announcement.manage",
 
   // Reporting
-  "financial_report.view",
+  /** Full financial reporting across the whole program (Super Admin only). */
+  "financial_report.view_all",
+  /**
+   * Operational financial data only — the transaction, commission, and payout
+   * figures an Administrator needs to review transactions, approve commissions,
+   * and build payout batches. Never program-wide financial reporting.
+   */
+  "financial_report.view_operational",
 
   // Account
   "account.manage_own",
@@ -110,10 +117,10 @@ const ADMINISTRATOR_PERMISSIONS: readonly Permission[] = [
   "marketing_asset.manage",
   "marketing_asset.view",
   "announcement.manage",
-  // Administrators review transactions, approve commissions, and build payout
-  // batches, so they need financial visibility. (Only partners are explicitly
-  // barred from financial reports.)
-  "financial_report.view",
+  // Operational financial visibility only — the figures required to review
+  // transactions, approve commissions, and create payout batches. Full
+  // program-wide financial reporting is Super Admin only.
+  "financial_report.view_operational",
   "account.manage_own",
 ];
 
@@ -162,12 +169,59 @@ const PERMISSION_SETS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   customer: new Set(CUSTOMER_PERMISSIONS),
 };
 
-/** Returns true if `role` holds `permission`. Deny-by-default. */
+/**
+ * A per-principal override of the role default.
+ *
+ * Roles supply the *defaults*; overrides let permissions become individually
+ * configurable later (stored per user) without changing enforcement code.
+ */
+export const PERMISSION_EFFECTS = ["allow", "deny"] as const;
+export const permissionEffectSchema = z.enum(PERMISSION_EFFECTS);
+export type PermissionEffect = z.infer<typeof permissionEffectSchema>;
+
+export const permissionOverrideSchema = z.object({
+  permission: permissionSchema,
+  effect: permissionEffectSchema,
+});
+export type PermissionOverride = z.infer<typeof permissionOverrideSchema>;
+
+/**
+ * Resolves the effective permission set for a principal: the role's defaults,
+ * plus any `allow` overrides, minus any `deny` overrides. **Deny always wins**,
+ * regardless of order.
+ *
+ * Enforcement code should resolve a set once per request and check against it,
+ * rather than branching on the role — that is what makes fully configurable
+ * permissions a data change rather than a rewrite.
+ */
+export function resolvePermissions(
+  role: Role,
+  overrides: readonly PermissionOverride[] = [],
+): ReadonlySet<Permission> {
+  const effective = new Set<Permission>(PERMISSION_SETS[role]);
+  for (const override of overrides) {
+    if (override.effect === "allow") effective.add(override.permission);
+  }
+  for (const override of overrides) {
+    if (override.effect === "deny") effective.delete(override.permission);
+  }
+  return effective;
+}
+
+/** Returns true if an already-resolved permission set holds `permission`. */
+export function hasPermission(
+  permissions: ReadonlySet<Permission>,
+  permission: Permission,
+): boolean {
+  return permissions.has(permission);
+}
+
+/** Returns true if `role` holds `permission` by default. Deny-by-default. */
 export function can(role: Role, permission: Permission): boolean {
   return PERMISSION_SETS[role].has(permission);
 }
 
-/** Returns true only if `role` holds every listed permission. */
+/** Returns true only if `role` holds every listed permission by default. */
 export function canAll(role: Role, permissions: readonly Permission[]): boolean {
   return permissions.every((permission) => can(role, permission));
 }
@@ -177,6 +231,17 @@ export interface Actor {
   role: Role;
   /** Set for `partner` actors: the partner record this actor owns. */
   partnerId?: string;
+  /**
+   * Effective permissions resolved for this principal (role defaults plus
+   * overrides). When omitted, the role's defaults are used.
+   */
+  permissions?: ReadonlySet<Permission>;
+}
+
+function actorHas(actor: Actor, permission: Permission): boolean {
+  return actor.permissions === undefined
+    ? can(actor.role, permission)
+    : actor.permissions.has(permission);
 }
 
 /**
@@ -203,8 +268,8 @@ export function canViewPartnerOwnedResource(
   ownerPartnerId: string,
 ): boolean {
   const scope = PARTNER_OWNED_RESOURCES[resource];
-  if (can(actor.role, scope.any)) return true;
-  if (can(actor.role, scope.own)) {
+  if (actorHas(actor, scope.any)) return true;
+  if (actorHas(actor, scope.own)) {
     return actor.partnerId !== undefined && actor.partnerId === ownerPartnerId;
   }
   return false;

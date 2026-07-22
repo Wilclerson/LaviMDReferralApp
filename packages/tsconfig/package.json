@@ -5,6 +5,7 @@
   "license": "UNLICENSED",
   "files": [
     "base.json",
-    "library.json"
+    "library.json",
+    "nestjs.json"
   ]
 }

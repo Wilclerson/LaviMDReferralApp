@@ -32,7 +32,7 @@ This is a **pnpm + Turborepo monorepo** written in TypeScript end to end.
 | `packages/shared`        | Shared domain types, Zod schemas, and utilities | ✅ Milestone 1 |
 | `packages/tsconfig`      | Shared TypeScript configuration presets         | ✅ Milestone 1 |
 | `packages/eslint-config` | Shared, type-aware ESLint flat config           | ✅ Milestone 1 |
-| `apps/api`               | NestJS backend API (PostgreSQL + Prisma)        | ⏳ Milestone 2 |
+| `apps/api`               | NestJS backend API (PostgreSQL + Prisma)        | ✅ Milestone 2 |
 | `apps/admin`             | Next.js admin dashboard                         | ⏳ Milestone 3 |
 | `apps/mobile`            | React Native (Expo) mobile app                  | ⏳ Milestone 4 |
 
@@ -68,6 +68,27 @@ pnpm build       # build all packages
 | `pnpm format`       | Format the repo with Prettier               |
 | `pnpm format:check` | Verify formatting (used in CI)              |
 | `pnpm clean`        | Remove build/test artifacts                 |
+
+## Running the API
+
+The fastest path is Docker (Postgres + API together):
+
+```bash
+docker compose up --build
+```
+
+Or run it locally against a Postgres instance:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+pnpm --filter @lavimd/api db:migrate:deploy
+pnpm --filter @lavimd/api db:seed
+pnpm --filter @lavimd/api dev
+```
+
+- API: `http://localhost:3000/api/v1`
+- OpenAPI docs: `http://localhost:3000/api/docs`
+- Probes: `http://localhost:3000/health/live` and `/health/ready`
 
 ## Continuous integration
 

@@ -60,35 +60,43 @@ These are hard product invariants — see [Things that must never change](#thing
 Client permissions are never trusted — the UI may render from these rules, but every decision is
 re-checked on the server. Implemented in `packages/shared/src/domain/authorization.ts`.
 
-| Capability                                            | Super Admin | Administrator | Partner | Customer |
-| ----------------------------------------------------- | :---------: | :-----------: | :-----: | :------: |
-| Full system access                                    |     ✅      |      ❌       |   ❌    |    ❌    |
-| Manage administrators                                 |     ✅      |      ❌       |   ❌    |    ❌    |
-| Create/manage Super Admins                            |     ✅      |      ❌       |   ❌    |    ❌    |
-| Configure system & security settings                  |     ✅      |      ❌       |   ❌    |    ❌    |
-| Configure integrations                                |     ✅      |      ❌       |   ❌    |    ❌    |
-| View audit logs                                       |     ✅      |      ❌       |   ❌    |    ❌    |
-| Configure commission plans                            |     ✅      |      ❌       |   ❌    |    ❌    |
-| Configure payout settings                             |     ✅      |      ❌       |   ❌    |    ❌    |
-| Manage partner categories                             |     ✅      |      ❌       |   ❌    |    ❌    |
-| Approve / suspend partners                            |     ✅      |      ✅       |   ❌    |    ❌    |
-| Manage referrals / view any referral                  |     ✅      |      ✅       |   ❌    |    ❌    |
-| Review transactions / view any transaction            |     ✅      |      ✅       |   ❌    |    ❌    |
-| Approve commissions / view any commission             |     ✅      |      ✅       |   ❌    |    ❌    |
-| Create payout batches / view any payout               |     ✅      |      ✅       |   ❌    |    ❌    |
-| Manage education, marketing assets, announcements     |     ✅      |      ✅       |   ❌    |    ❌    |
-| View financial reports                                |     ✅      |     ✅ ⚠️     |   ❌    |    ❌    |
-| Edit own profile / upload own documents               |     ✅      |       —       |   ✅    |    ❌    |
-| View education / complete certifications              |     ✅      |      ✅       |   ✅    |   ✅¹    |
-| Access marketing materials                            |     ✅      |      ✅       |   ✅    |    ❌    |
-| View **own** referrals / commissions / payouts / txns |     ✅      |       —       |   ✅    |    ❌    |
-| Generate referral links & QR codes                    |     ✅      |       —       |   ✅    |    ❌    |
-| Complete onboarding / manage own account              |     ✅      |      ✅       |   ✅    |    ✅    |
+| Capability                                             | Super Admin | Administrator | Partner | Customer |
+| ------------------------------------------------------ | :---------: | :-----------: | :-----: | :------: |
+| Full system access                                     |     ✅      |      ❌       |   ❌    |    ❌    |
+| Manage administrators                                  |     ✅      |      ❌       |   ❌    |    ❌    |
+| Create/manage Super Admins                             |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure system & security settings                   |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure integrations                                 |     ✅      |      ❌       |   ❌    |    ❌    |
+| View audit logs                                        |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure commission plans                             |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure payout settings                              |     ✅      |      ❌       |   ❌    |    ❌    |
+| Manage partner categories                              |     ✅      |      ❌       |   ❌    |    ❌    |
+| Approve / suspend partners                             |     ✅      |      ✅       |   ❌    |    ❌    |
+| Manage referrals / view any referral                   |     ✅      |      ✅       |   ❌    |    ❌    |
+| Review transactions / view any transaction             |     ✅      |      ✅       |   ❌    |    ❌    |
+| Approve commissions / view any commission              |     ✅      |      ✅       |   ❌    |    ❌    |
+| Create payout batches / view any payout                |     ✅      |      ✅       |   ❌    |    ❌    |
+| Manage education, marketing assets, announcements      |     ✅      |      ✅       |   ❌    |    ❌    |
+| Full financial reporting (`financial_report.view_all`) |     ✅      |      ❌       |   ❌    |    ❌    |
+| Operational financial data only (`…view_operational`)  |     ✅      |      ✅       |   ❌    |    ❌    |
+| Edit own profile / upload own documents                |     ✅      |       —       |   ✅    |    ❌    |
+| View education / complete certifications               |     ✅      |      ✅       |   ✅    |   ✅¹    |
+| Access marketing materials                             |     ✅      |      ✅       |   ✅    |    ❌    |
+| View **own** referrals / commissions / payouts / txns  |     ✅      |       —       |   ✅    |    ❌    |
+| Generate referral links & QR codes                     |     ✅      |       —       |   ✅    |    ❌    |
+| Complete onboarding / manage own account               |     ✅      |      ✅       |   ✅    |    ✅    |
 
 ¹ Customers may view educational content; certifications are partner-only.
-⚠️ **Engineering inference:** Administrators are granted `financial_report.view` because they
-review transactions, approve commissions, and create payout batches. Only partners were explicitly
-barred. Flag if this should be Super Admin only.
+
+🟢 **Financial visibility is split:** Super Admin holds `financial_report.view_all` (full financial
+reporting). Administrators hold only `financial_report.view_operational` — the transaction,
+commission, and payout figures their duties require, never program-wide reporting.
+
+🟡 **Future:** permissions become individually configurable rather than tied directly to roles.
+The code already supports this: roles supply _defaults_ and `resolvePermissions(role, overrides)`
+applies per-user `allow`/`deny` overrides (deny always wins), stored in the `PermissionGrant`
+table. Enforcement checks a resolved permission set, never the role — so enabling configurable
+permissions is a data change, not a rewrite.
 
 **Partners may never:** view another partner's information, approve commissions, modify commission
 rules, view financial reports, view audit logs, view customer clinical information, or view
@@ -100,6 +108,20 @@ public, unauthenticated action rather than a permission (no session exists yet).
 
 > There is deliberately **no permission for customer clinical information** — the platform holds no
 > clinical data at all, so such access is denied by absence rather than by rule.
+
+## Audit logging
+
+🟢 **Every sensitive administrator action creates an immutable audit record.** The trail is
+append-only: no update or delete path exists anywhere in the application.
+
+Audited actions: **Partner Approved**, **Partner Suspended**, **Commission Approved**,
+**Commission Rejected**, **Commission Reversed**, **Payout Created**, **Payout Approved**,
+**Payout Cancelled**, **Commission Plan Changed**, **Role Changed**, **Permission Changed**,
+**Manual Attribution Override**, **Manual Transaction Import**.
+
+🟢 Every audit entry stores: **user** (actor id + role), **timestamp**, **IP** (when available),
+**previous value**, **new value**, and a **reason** — the reason is required, so privileged
+actions always explain themselves.
 
 ## Business rules
 
@@ -252,8 +274,9 @@ Milestone detail lives in [docs/milestones.md](docs/milestones.md). Summary:
 2. 🟢 **M1.5 — Domain remodel to the affiliate/partner-network model** (done)
 3. 🟢 **M1.7 — Affiliate rules in the domain** (done): eligibility, commission plans, attribution,
    payouts, ledger, and the event catalog in `packages/shared`
-4. ⏳ **M2 — Backend API foundation** (NestJS, Postgres/Prisma: partners, referrals, transactions,
-   commissions, admin approval, in-process event bus, ingestion abstraction)
+4. 🟢 **M2 — Backend API foundation** (done): NestJS + Postgres/Prisma, JWT auth, RBAC guards,
+   partner/referral/transaction/commission/ledger/audit modules, in-process event bus, OpenAPI,
+   Docker, migrations, seed
 5. ⏳ **M3 — Admin dashboard** (Next.js: review/approval queues, partner management, reporting)
 6. ⏳ **M4 — Partner mobile app** (Expo: links, referrals, earnings)
 7. ⏳ **M5 — Auth & RBAC** (partner vs. administrator)
@@ -292,6 +315,14 @@ A dated log of decisions promoted to 🟢. (Append-only; do not rewrite history.
   `packages/shared/src/domain/authorization.ts`. Authorization is role-based, **server-side, and
   deny-by-default**; client permissions are never trusted. Administrators cannot change
   system/security settings or create Super Admins; partners can only ever see their own data.
+- **2026-07-22** — **Administrator financial visibility limited to operational needs**
+  (`financial_report.view_operational`); full financial reporting is Super Admin only
+  (`financial_report.view_all`). **Permissions are designed to become configurable later**:
+  roles supply defaults, per-user `allow`/`deny` overrides resolve on top (deny wins), and
+  enforcement checks the resolved set rather than the role.
+- **2026-07-22** — **Immutable audit logging is mandatory for every privileged administrator
+  action**, storing user, timestamp, IP (when available), previous value, new value, and a
+  required reason. See [Audit logging](#audit-logging).
 
 ## Open business questions
 
@@ -304,9 +335,10 @@ commission model, attribution, and payout mechanics are now resolved — see Pro
 4. 🔴 **Which users get mobile vs. admin**, and notification requirements.
 5. 🔴 **Official branding** — logo, colors, fonts, voice, required disclaimers.
 6. 🔴 **Fraud/duplicate detection** — self-referral and cross-partner rules.
-7. 🔴 **Confirm two authorization inferences** — Administrator access to financial reports, and
-   registration modeled as a public action. See
-   [Roles & authorization matrix](#roles--authorization-matrix).
+7. 🟡 **Customer registration is modeled as a public, unauthenticated action** rather than a
+   permission (no session exists at sign-up). Confirm.
+8. 🔴 **Verify the initial migration against a live PostgreSQL** — the SQL is generated offline and
+   has not yet been applied to a real server. _(First task once a database is available.)_
 
 ## Integrations
 
@@ -353,6 +385,8 @@ Invariants. Changing any of them requires an explicit, recorded decision (a new 
 - 🟢 **Partners can only ever see their own data** (referrals, transactions, commissions, payouts);
   they never see another partner's information, financial reports, or audit logs.
 - 🟢 **Administrators can never change system/security settings or create Super Admins.**
+- 🟢 **Every sensitive administrator action writes an immutable audit record** (user, timestamp,
+  IP when available, previous value, new value, reason). Audit entries are never updated or deleted.
 - 🟢 **No secrets or credentials committed to the repository.**
 - 🟢 **Untrusted input is validated at the boundary** (shared Zod schemas) before use.
 - 🟢 **Shared types are the single contract** between client and server.

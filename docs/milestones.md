@@ -45,17 +45,29 @@ broken state, and lint/test failures are never ignored.
   partners can only ever see their own referrals, transactions, commissions, and payouts.
 - 110 tests at 100% coverage, asserting every "may" and "may never" in the matrix.
 
-## ⏳ Milestone 2 — Backend API foundation
+## ✅ Milestone 2 — Backend API foundation
 
-- `apps/api` (NestJS): config module, health/readiness endpoints, structured logging.
-- PostgreSQL via Prisma; schema + migrations for partners, referrals, transactions, commissions,
-  commission plans, payouts, and the ledger.
-- CRUD + **status-transition enforcement** using the shared state machines; administrator
-  approval flow for commissions and payouts.
-- **In-process event bus** implementing `EventPublisher`; publishers/subscribers for the domain events.
-- **Transaction ingestion abstraction** (manual/CSV/REST/webhook) — MVP: manual admin entry.
-- Request validation via shared Zod schemas; error handling; OpenAPI docs.
-- Unit + e2e tests; Dockerfile for the API.
+- `apps/api` (NestJS 11): Zod-validated env config, version-neutral health probes, global error
+  filter that never leaks internals.
+- **PostgreSQL via Prisma**: `User`, `PermissionGrant`, `Partner`, `Referral`, `Transaction`,
+  `CommissionPlan`/`CommissionRule`, `Commission`, `LedgerEntry`, `AuditLog` + initial migration.
+- **Authentication**: JWT login (`bcryptjs` hashing, generic errors that don't enumerate users).
+- **RBAC guards**: global `JwtAuthGuard` + `PermissionsGuard`; deny-by-default with explicit
+  `@Public()`; permissions resolved **server-side per request** from role + stored overrides.
+- **Modules**: Partner (approve/suspend), Referral, Transaction (manual import → eligibility →
+  pending commission; attribution override), Commission (approve/reject/reverse), Ledger
+  (append-only), Audit (append-only writer + Super-Admin read).
+- **Event-driven**: `InMemoryEventBus` implementing the shared `EventPublisher`; commission
+  approval publishes an event that the ledger subscriber reacts to.
+- **OpenAPI** generated with component schemas derived from the shared Zod contracts.
+- Docker + docker-compose (Postgres + API), seed data, 116 tests incl. an HTTP e2e suite.
+
+### Deferred from M2 (documented)
+
+- **Payout endpoints** → Milestone 6 (payout domain types exist; the `Payout` table lands there).
+- **Verifying the migration against a live PostgreSQL** — the SQL is generated offline and no
+  test currently runs against a real database. First task when a DB is available.
+- Partner self-service profile editing, CSV/webhook ingestion adapters → M3/M6.
 
 ## ⏳ Milestone 3 — Admin dashboard
 

@@ -3,8 +3,10 @@ import {
   can,
   canAll,
   canViewPartnerOwnedResource,
+  hasPermission,
   isAdminRole,
   PERMISSIONS,
+  resolvePermissions,
   ROLE_PERMISSIONS,
   ROLES,
   roleSchema,
@@ -41,6 +43,8 @@ describe("administrator", () => {
     "education.manage",
     "marketing_asset.manage",
     "announcement.manage",
+    // Operational financial visibility only.
+    "financial_report.view_operational",
   ];
 
   const denied: Permission[] = [
@@ -53,6 +57,8 @@ describe("administrator", () => {
     "commission_plan.manage",
     "payout_settings.manage",
     "partner_category.manage",
+    // Full program-wide financial reporting is Super Admin only.
+    "financial_report.view_all",
   ];
 
   it("can run the program", () => {
@@ -84,7 +90,8 @@ describe("partner", () => {
     "partner.view_any",
     "commission.approve",
     "commission_plan.manage",
-    "financial_report.view",
+    "financial_report.view_all",
+    "financial_report.view_operational",
     "system.audit_log.view",
     "transaction.view_any",
     "referral.view_any",
@@ -146,6 +153,70 @@ describe("canViewPartnerOwnedResource", () => {
 
   it("denies customers outright", () => {
     expect(canViewPartnerOwnedResource({ role: "customer" }, "commission", PARTNER_A)).toBe(false);
+  });
+});
+
+describe("resolvePermissions", () => {
+  it("returns the role defaults when there are no overrides", () => {
+    const resolved = resolvePermissions("partner");
+    expect(hasPermission(resolved, "referral.view_own")).toBe(true);
+    expect(hasPermission(resolved, "commission.approve")).toBe(false);
+  });
+
+  it("grants an extra permission via an allow override", () => {
+    const resolved = resolvePermissions("administrator", [
+      { permission: "system.audit_log.view", effect: "allow" },
+    ]);
+    expect(hasPermission(resolved, "system.audit_log.view")).toBe(true);
+  });
+
+  it("removes a default permission via a deny override", () => {
+    const resolved = resolvePermissions("administrator", [
+      { permission: "commission.approve", effect: "deny" },
+    ]);
+    expect(hasPermission(resolved, "commission.approve")).toBe(false);
+  });
+
+  it("lets deny win over allow regardless of order", () => {
+    const denyFirst = resolvePermissions("partner", [
+      { permission: "referral.view_any", effect: "deny" },
+      { permission: "referral.view_any", effect: "allow" },
+    ]);
+    const allowFirst = resolvePermissions("partner", [
+      { permission: "referral.view_any", effect: "allow" },
+      { permission: "referral.view_any", effect: "deny" },
+    ]);
+    expect(hasPermission(denyFirst, "referral.view_any")).toBe(false);
+    expect(hasPermission(allowFirst, "referral.view_any")).toBe(false);
+  });
+
+  it("does not mutate the role defaults", () => {
+    resolvePermissions("customer", [{ permission: "commission.approve", effect: "allow" }]);
+    expect(can("customer", "commission.approve")).toBe(false);
+  });
+});
+
+describe("canViewPartnerOwnedResource with resolved permissions", () => {
+  it("honours an override granting cross-partner visibility", () => {
+    const actor = {
+      role: "partner",
+      partnerId: PARTNER_A,
+      permissions: resolvePermissions("partner", [
+        { permission: "commission.view_any", effect: "allow" },
+      ]),
+    } as const;
+    expect(canViewPartnerOwnedResource(actor, "commission", PARTNER_B)).toBe(true);
+  });
+
+  it("honours an override revoking own-data visibility", () => {
+    const actor = {
+      role: "partner",
+      partnerId: PARTNER_A,
+      permissions: resolvePermissions("partner", [
+        { permission: "referral.view_own", effect: "deny" },
+      ]),
+    } as const;
+    expect(canViewPartnerOwnedResource(actor, "referral", PARTNER_A)).toBe(false);
   });
 });
 
