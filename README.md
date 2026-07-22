@@ -1,7 +1,12 @@
 # LaviMD Referral App
 
-A referral management platform for LaviMD — a backend API, an admin dashboard, and a
-mobile app, sharing a single TypeScript codebase.
+LaviMD's **Professional Partner Network** — a marketing / affiliate referral platform where
+non-medical partners (trainers, stylists, coaches, gyms, influencers, …) invite customers to
+LaviMD and earn commission on administrator-approved eligible transactions. A backend API, an
+admin dashboard, and a partner mobile app share a single TypeScript codebase.
+
+> This is **not** a clinical system: partners never practice medicine, and all medical decisions
+> stay with LaviMD's licensed providers. See [PROJECT.md](PROJECT.md).
 
 > **Status:** Milestone 1 — monorepo foundation and CI/CD are in place. Application code
 > (API, admin, mobile) lands in subsequent milestones. See [docs/milestones.md](docs/milestones.md).
