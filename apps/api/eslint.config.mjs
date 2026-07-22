@@ -11,7 +11,7 @@ export default [
     },
   },
   {
-    files: ["**/*.spec.ts"],
+    files: ["**/*.spec.ts", "test/**/*.ts"],
     rules: {
       // `expect(mock.method).toHaveBeenCalled()` intentionally references a
       // method without binding it; this rule only makes sense for real classes.
@@ -20,6 +20,9 @@ export default [
       // flags those bridging casts even though they are what makes the double
       // usable. Production code keeps the rule enabled.
       "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      // Nest's `app.getHttpServer()` is typed `any`, so supertest calls are
+      // unavoidably "unsafe" in e2e tests.
+      "@typescript-eslint/no-unsafe-argument": "off",
     },
   },
 ];

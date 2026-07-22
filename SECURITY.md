@@ -30,6 +30,16 @@ Security is designed around protecting that data.
   domain state machine. Commission calculations are versioned and auditable.
 - **Type safety and linting** enforced in CI (type-aware ESLint, `tsc`, zero warnings).
 - **Least-privilege CI.** GitHub Actions runs with `permissions: contents: read`.
+- **Public registration is hardened.** Customer sign-up is intentionally unauthenticated, and is
+  protected by per-IP rate limiting, strict validation, mandatory consent capture, and a constant
+  response that prevents account enumeration. Registration attempts are logged with masked emails.
+- **Consent is append-only.** Consent decisions are recorded as immutable rows (type, granted,
+  policy version, IP, user agent, timestamp) — a change of mind writes a new record.
+- **Ingestion is idempotent.** Replayed webhook/API deliveries are recognised by
+  `(source, externalEventId)` and re-imported orders by `(source, externalRef)`; a replay performs
+  no new work, so a retrying upstream cannot duplicate commissions.
+- **Audit entries survive their author.** Deleting a user that owns audit entries is blocked by a
+  database `RESTRICT`, so history cannot be erased by removing the account that made it.
 
 ## Planned before launch
 

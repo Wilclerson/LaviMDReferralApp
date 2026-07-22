@@ -17,6 +17,10 @@
       "dependsOn": ["^build", "db:generate"],
       "outputs": ["coverage/**"]
     },
+    "test:integration": {
+      "dependsOn": ["^build", "db:generate"],
+      "cache": false
+    },
     "lint": {
       "dependsOn": ["db:generate"]
     },

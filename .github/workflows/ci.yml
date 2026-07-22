@@ -42,8 +42,17 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
-      - name: Test
+      - name: Unit tests
         run: pnpm run test
+
+      # Starts a real PostgreSQL via embedded binaries (no Docker service
+      # needed), applies the committed migrations from an empty database, and
+      # runs the database-backed suite.
+      - name: Database integration tests
+        run: pnpm run test:integration
+
+      - name: Verify migrations and seed from a clean database
+        run: pnpm --filter @lavimd/api run db:verify
 
       - name: Build
         run: pnpm run build

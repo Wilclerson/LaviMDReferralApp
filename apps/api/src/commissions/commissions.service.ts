@@ -137,10 +137,11 @@ export class CommissionsService {
     return commission;
   }
 
+  /** Owner scoping. An actor with no partner record matches nothing. */
   private scopeFilter(actor: AuthenticatedUser): Prisma.CommissionWhereInput {
     if (actor.permissions.has("commission.view_any")) return {};
     if (actor.permissions.has("commission.view_own")) {
-      return { partnerId: actor.partnerId ?? "__no_partner__" };
+      return actor.partnerId === null ? { partnerId: { in: [] } } : { partnerId: actor.partnerId };
     }
     throw new ForbiddenException("Insufficient permissions");
   }

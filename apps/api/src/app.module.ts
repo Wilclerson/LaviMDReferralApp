@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { CustomersModule } from "./customers/customers.module";
 import { EventsModule } from "./common/events/events.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
@@ -16,11 +18,15 @@ import { TransactionsModule } from "./transactions/transactions.module";
 
 @Module({
   imports: [
+    // Baseline abuse protection for every route; public endpoints tighten it
+    // further with @Throttle().
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     EventsModule,
     AuthModule,
     AuditModule,
     HealthModule,
+    CustomersModule,
     PartnersModule,
     ReferralsModule,
     TransactionsModule,
@@ -28,8 +34,10 @@ import { TransactionsModule } from "./transactions/transactions.module";
     LedgerModule,
   ],
   providers: [
-    // Authentication runs first, then permission enforcement. Both are global:
-    // access is deny-by-default and routes opt out explicitly with @Public().
+    // Rate limiting runs before authentication so floods are shed cheaply, then
+    // authentication, then permission enforcement. Access is deny-by-default;
+    // routes opt out explicitly with @Public().
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

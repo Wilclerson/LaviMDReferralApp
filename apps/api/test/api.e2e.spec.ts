@@ -25,7 +25,7 @@ const PARTNER_USER = {
   permissionGrants: [],
 };
 
-const USERS = new Map([
+const USERS = new Map<string, { id: string; role: string; partnerId: string | null }>([
   [SUPER_ADMIN.id, SUPER_ADMIN],
   [PARTNER_USER.id, PARTNER_USER],
 ]);
@@ -56,8 +56,8 @@ describe("API (e2e)", () => {
   let jwt: JwtService;
 
   beforeAll(async () => {
-    process.env["JWT_SECRET"] = "e2e-test-secret-value-at-least-32-chars";
-    process.env["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/db";
+    process.env.JWT_SECRET = "e2e-test-secret-value-at-least-32-chars";
+    process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/db";
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)

@@ -6,7 +6,10 @@ import {
   type PaginationInput,
 } from "@lavimd/shared";
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Referral } from "@prisma/client";
+import type { Prisma, Referral } from "@prisma/client";
+
+/** A filter that can never match a row, used when an actor owns no records. */
+const MATCHES_NOTHING: Prisma.ReferralWhereInput = { partnerId: { in: [] } };
 import { InMemoryEventBus } from "../common/events/event-bus";
 import type { AuthenticatedUser } from "../common/types/authenticated-user";
 import { PrismaService } from "../prisma/prisma.service";
@@ -71,12 +74,13 @@ export class ReferralsService {
 
   /**
    * Builds the query filter enforcing owner scoping. A partner without a linked
-   * partner record matches nothing rather than everything.
+   * partner record matches nothing rather than everything — expressed as an
+   * empty `in` list, since a sentinel string is not a valid UUID.
    */
-  private scopeFilter(actor: AuthenticatedUser): { partnerId?: string } {
+  private scopeFilter(actor: AuthenticatedUser): Prisma.ReferralWhereInput {
     if (actor.permissions.has("referral.view_any")) return {};
     if (actor.permissions.has("referral.view_own")) {
-      return { partnerId: actor.partnerId ?? "__no_partner__" };
+      return actor.partnerId === null ? MATCHES_NOTHING : { partnerId: actor.partnerId };
     }
     throw new ForbiddenException("Insufficient permissions");
   }

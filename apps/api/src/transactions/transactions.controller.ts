@@ -10,6 +10,8 @@ import { TransactionsService } from "./transactions.service";
 
 const importSchema = createTransactionSchema.extend({
   reason: z.string().min(1).max(1000),
+  /** Optional delivery id used to make replays idempotent. */
+  externalEventId: z.string().min(1).max(200).optional(),
 });
 type ImportBody = z.infer<typeof importSchema>;
 
@@ -33,12 +35,12 @@ export class TransactionsController {
     @CurrentUser() user: AuthenticatedUser,
     @Req() request: RequestWithUser,
   ): ReturnType<TransactionsService["importManual"]> {
-    const { reason, ...transaction } = body;
-    return this.transactionsService.importManual(transaction, {
-      actor: user,
-      ip: clientIp(request),
-      reason,
-    });
+    const { reason, externalEventId, ...transaction } = body;
+    return this.transactionsService.importManual(
+      transaction,
+      { actor: user, ip: clientIp(request), reason },
+      externalEventId,
+    );
   }
 
   @Post(":id/attribution")

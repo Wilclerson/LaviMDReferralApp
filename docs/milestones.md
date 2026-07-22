@@ -69,6 +69,33 @@ broken state, and lint/test failures are never ignored.
   test currently runs against a real database. First task when a DB is available.
 - Partner self-service profile editing, CSV/webhook ingestion adapters → M3/M6.
 
+## ✅ Milestone 2.1 — Database validation & hardening
+
+Validated the schema against a **real PostgreSQL 18** and hardened what it exposed.
+
+- **Real database, no Docker required.** This machine had no Docker/WSL, so tooling and tests
+  start official PostgreSQL binaries as a user process (`embedded-postgres`) via
+  `scripts/with-db.mjs`. `docker compose` remains available for running the stack.
+- **Migrations verified from an empty database**, plus the seed (`pnpm --filter @lavimd/api run db:verify`).
+- **42 database-backed integration tests** covering tables, enums, foreign keys, unique
+  constraints, indexes, cascade/restrict behaviour, the full partner → referral → transaction →
+  commission → ledger flow, audit-transaction rollback, idempotent ingestion, permission
+  overrides, partner-owned isolation, and health probes with the database up and down.
+- **Customer registration** (public, unauthenticated) with per-IP rate limiting, schema
+  validation, append-only consent capture, and a constant response that prevents enumeration.
+- **Idempotent ingestion**: unique `(source, externalRef)` plus an `IngestedEvent` table keyed on
+  `(source, externalEventId)`; replays return the original result and do no new work.
+- **Dockerfile** now ships production dependencies only (`pnpm deploy --prod`).
+
+### Defects found and fixed by this pass
+
+1. **UTF-8 BOM in the committed migration files** — Prisma could not parse them, so
+   `migrate deploy` would have failed on any real database.
+2. **`__no_partner__` sentinel used as a UUID** — a partner user with no linked partner record
+   caused a database error instead of an empty result. Now an empty `in` list.
+3. Prisma reports `ON DELETE RESTRICT` as an unknown error (PostgreSQL `23001`), not `P2003` —
+   worth knowing before writing error handling against it.
+
 ## ⏳ Milestone 3 — Admin dashboard
 
 - `apps/admin` (Next.js): authenticated administrator dashboard.

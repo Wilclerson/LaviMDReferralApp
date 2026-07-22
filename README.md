@@ -77,18 +77,85 @@ The fastest path is Docker (Postgres + API together):
 docker compose up --build
 ```
 
-Or run it locally against a Postgres instance:
-
-```bash
-cp apps/api/.env.example apps/api/.env
-pnpm --filter @lavimd/api db:migrate:deploy
-pnpm --filter @lavimd/api db:seed
-pnpm --filter @lavimd/api dev
-```
-
 - API: `http://localhost:3000/api/v1`
 - OpenAPI docs: `http://localhost:3000/api/docs`
 - Probes: `http://localhost:3000/health/live` and `/health/ready`
+
+## Database setup
+
+### Option A — Docker Compose (recommended for running the stack)
+
+Start only PostgreSQL, then run the API on the host:
+
+```bash
+docker compose up -d postgres
+```
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+Apply migrations and seed development data:
+
+```bash
+pnpm --filter @lavimd/api run db:migrate:deploy
+```
+
+```bash
+pnpm --filter @lavimd/api run db:seed
+```
+
+Then start the API:
+
+```bash
+pnpm --filter @lavimd/api run dev
+```
+
+### Option B — no Docker required
+
+Tooling and tests can start a **real PostgreSQL** from bundled binaries
+(`embedded-postgres`) as an ordinary user process — no Docker daemon, no admin
+rights. This is what CI uses.
+
+Apply the migrations and seed against a throwaway database in one step:
+
+```bash
+pnpm --filter @lavimd/api run db:verify
+```
+
+Run any command against a throwaway database:
+
+```bash
+node apps/api/scripts/with-db.mjs "pnpm exec prisma studio"
+```
+
+### Migration commands
+
+| Command                                                         | What it does                                                      |
+| --------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `pnpm --filter @lavimd/api run db:generate`                     | Regenerate the Prisma client from `schema.prisma`                 |
+| `pnpm --filter @lavimd/api run db:migrate:deploy`               | Apply pending migrations (used in CI and containers)              |
+| `pnpm --filter @lavimd/api run db:migrate:dev -- --name <name>` | Create a new migration from schema changes (development)          |
+| `pnpm --filter @lavimd/api run db:seed`                         | Seed development data (refuses to run with `NODE_ENV=production`) |
+| `pnpm --filter @lavimd/api run db:verify`                       | Apply all migrations **and** seed against a clean database        |
+
+> Migration SQL files must be committed **without a UTF-8 BOM** — Prisma cannot
+> parse them otherwise. Prefer `prisma migrate dev` over hand-writing them.
+
+## Testing
+
+```bash
+pnpm test
+```
+
+```bash
+pnpm test:integration
+```
+
+`pnpm test` runs the unit suites. `pnpm test:integration` starts a real
+PostgreSQL, applies the committed migrations from an **empty** database, and runs
+the database-backed suite — so every run also proves the migration history
+applies from scratch.
 
 ## Continuous integration
 

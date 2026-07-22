@@ -1,5 +1,6 @@
 export * from "./domain/authorization";
 export * from "./domain/audit";
+export * from "./domain/registration";
 export * from "./domain/partner";
 export * from "./domain/referral";
 export * from "./domain/transaction";

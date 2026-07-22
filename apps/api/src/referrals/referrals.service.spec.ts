@@ -81,8 +81,10 @@ describe("ReferralsService owner scoping", () => {
   it("matches nothing for a partner user with no linked partner record", async () => {
     const { service, findMany } = setup();
     await service.listForActor(actor("partner", null));
+    // An empty `in` list matches nothing. A sentinel string would be rejected
+    // by PostgreSQL, since partnerId is a UUID column.
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { partnerId: "__no_partner__" } }),
+      expect.objectContaining({ where: { partnerId: { in: [] } } }),
     );
   });
 

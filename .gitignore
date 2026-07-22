@@ -17,6 +17,9 @@ out/
 coverage/
 *.lcov
 
+# Local embedded PostgreSQL data directory (integration tests)
+.pgdata/
+
 # Environment / secrets
 .env
 .env.*

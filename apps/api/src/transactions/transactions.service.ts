@@ -1,6 +1,7 @@
 import {
   type CommissionRule,
   computeRuleCommissionMinor,
+  type CreateTransaction,
   type CreateTransactionInput,
   createTransactionSchema,
   evaluateTransactionEligibility,
@@ -26,6 +27,20 @@ export interface ImportTransactionResult {
   /** Reasons the transaction was not eligible; empty when a commission was raised. */
   ineligibleReasons: string[];
   commissionId: string | null;
+  /** True when this delivery was a replay and no new work was performed. */
+  idempotent: boolean;
+}
+
+/** Prisma's unique-constraint violation. */
+const UNIQUE_VIOLATION = "P2002";
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === UNIQUE_VIOLATION
+  );
 }
 
 /** Prisma rule rows use the same shape as the shared domain rule. */
@@ -63,8 +78,14 @@ export class TransactionsService {
   async importManual(
     input: CreateTransactionInput,
     ctx: AdminActionContext,
+    externalEventId?: string,
   ): Promise<ImportTransactionResult> {
     const data = createTransactionSchema.parse(input);
+
+    // Idempotency, checked before any write. A replayed webhook/API delivery or
+    // a re-imported order must never create a second transaction or commission.
+    const replay = await this.findExistingDelivery(data, externalEventId);
+    if (replay !== null) return replay;
 
     const referral = await this.prisma.referral.findUnique({
       where: { id: data.referralId },
@@ -72,7 +93,97 @@ export class TransactionsService {
     });
     if (referral === null) throw new NotFoundException("Referral not found");
 
-    const transaction = await this.prisma.$transaction(async (tx) => {
+    let transaction: Transaction;
+    try {
+      transaction = await this.createTransactionWithAudit(data, ctx, externalEventId);
+    } catch (error) {
+      // Lost a race against a concurrent delivery of the same event: the unique
+      // constraint is the source of truth, so re-read and report it as a replay.
+      if (isUniqueViolation(error)) {
+        const concurrent = await this.findExistingDelivery(data, externalEventId);
+        if (concurrent !== null) return concurrent;
+      }
+      throw error;
+    }
+
+    await this.events.emit("purchase.completed", {
+      transactionId: transaction.id,
+      referralId: transaction.referralId,
+    });
+
+    const eligibility = evaluateTransactionEligibility(
+      {
+        settlementStatus: transaction.settlementStatus,
+        refunded: transaction.refunded,
+        chargedBack: transaction.chargedBack,
+        cancelled: transaction.cancelled,
+      },
+      {
+        partnerActive: referral.partner.status === "active",
+        attributionValid: referral.status !== "cancelled" && referral.status !== "expired",
+      },
+    );
+
+    if (!eligibility.eligible) {
+      return {
+        transaction,
+        ineligibleReasons: eligibility.reasons,
+        commissionId: null,
+        idempotent: false,
+      };
+    }
+
+    const commissionId = await this.raisePendingCommission(transaction, referral.partnerId);
+    return { transaction, ineligibleReasons: [], commissionId, idempotent: false };
+  }
+
+  /**
+   * Returns the already-recorded result for a delivery we have seen before,
+   * matched first by event id and then by the source's own order reference.
+   */
+  private async findExistingDelivery(
+    data: { source: Transaction["source"]; externalRef?: string | undefined },
+    externalEventId: string | undefined,
+  ): Promise<ImportTransactionResult | null> {
+    if (externalEventId !== undefined) {
+      const seen = await this.prisma.ingestedEvent.findUnique({
+        where: { source_externalEventId: { source: data.source, externalEventId } },
+        include: { transaction: true },
+      });
+      if (seen?.transaction != null) {
+        return this.replayResult(seen.transaction);
+      }
+    }
+
+    if (data.externalRef !== undefined) {
+      const existing = await this.prisma.transaction.findUnique({
+        where: { source_externalRef: { source: data.source, externalRef: data.externalRef } },
+      });
+      if (existing !== null) return this.replayResult(existing);
+    }
+
+    return null;
+  }
+
+  private async replayResult(transaction: Transaction): Promise<ImportTransactionResult> {
+    const commission = await this.prisma.commission.findFirst({
+      where: { transactionId: transaction.id },
+      orderBy: { level: "asc" },
+    });
+    return {
+      transaction,
+      ineligibleReasons: [],
+      commissionId: commission?.id ?? null,
+      idempotent: true,
+    };
+  }
+
+  private async createTransactionWithAudit(
+    data: CreateTransaction,
+    ctx: AdminActionContext,
+    externalEventId: string | undefined,
+  ): Promise<Transaction> {
+    return this.prisma.$transaction(async (tx) => {
       const created = await tx.transaction.create({
         data: {
           referralId: data.referralId,
@@ -101,33 +212,17 @@ export class TransactionsService {
         },
         tx,
       );
+
+      // Recorded in the same transaction as the import, so the idempotency
+      // marker can never be written without the work it guards.
+      if (externalEventId !== undefined) {
+        await tx.ingestedEvent.create({
+          data: { source: data.source, externalEventId, transactionId: created.id },
+        });
+      }
+
       return created;
     });
-
-    await this.events.emit("purchase.completed", {
-      transactionId: transaction.id,
-      referralId: transaction.referralId,
-    });
-
-    const eligibility = evaluateTransactionEligibility(
-      {
-        settlementStatus: transaction.settlementStatus,
-        refunded: transaction.refunded,
-        chargedBack: transaction.chargedBack,
-        cancelled: transaction.cancelled,
-      },
-      {
-        partnerActive: referral.partner.status === "active",
-        attributionValid: referral.status !== "cancelled" && referral.status !== "expired",
-      },
-    );
-
-    if (!eligibility.eligible) {
-      return { transaction, ineligibleReasons: eligibility.reasons, commissionId: null };
-    }
-
-    const commissionId = await this.raisePendingCommission(transaction, referral.partnerId);
-    return { transaction, ineligibleReasons: [], commissionId };
   }
 
   /** Creates the level-1 commission for an eligible transaction, pending review. */
@@ -229,7 +324,9 @@ export class TransactionsService {
   private scopeFilter(actor: AuthenticatedUser): Prisma.TransactionWhereInput {
     if (actor.permissions.has("transaction.view_any")) return {};
     if (actor.permissions.has("transaction.view_own")) {
-      return { referral: { partnerId: actor.partnerId ?? "__no_partner__" } };
+      return actor.partnerId === null
+        ? { referral: { partnerId: { in: [] } } }
+        : { referral: { partnerId: actor.partnerId } };
     }
     throw new ForbiddenException("Insufficient permissions");
   }

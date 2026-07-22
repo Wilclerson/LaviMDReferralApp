@@ -5,7 +5,7 @@ import {
   sumLedgerBalanceMinor,
 } from "@lavimd/shared";
 import { ForbiddenException, Injectable } from "@nestjs/common";
-import type { LedgerEntry } from "@prisma/client";
+import type { LedgerEntry, Prisma } from "@prisma/client";
 import type { AuthenticatedUser } from "../common/types/authenticated-user";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -63,8 +63,7 @@ export class LedgerService {
     partnerId: string | undefined,
     pagination: PaginationInput = {},
   ): Promise<{ items: LedgerEntry[]; total: number; page: number; pageSize: number }> {
-    const scopedPartnerId = this.resolveScope(actor, partnerId);
-    const where = scopedPartnerId === null ? {} : { partnerId: scopedPartnerId };
+    const where = this.scopeFilter(actor, partnerId);
     const { page, pageSize, offset, limit } = normalizePagination(pagination);
 
     const [items, total] = await Promise.all([
@@ -80,15 +79,18 @@ export class LedgerService {
   }
 
   /**
-   * Returns the partner id to filter by, or `null` for "no filter" (admins).
-   * Partners are always forced onto their own id regardless of what they ask for.
+   * Owner scoping. Partners are always forced onto their own id regardless of
+   * what they request; an actor with no partner record matches nothing.
    */
-  private resolveScope(actor: AuthenticatedUser, requested: string | undefined): string | null {
+  private scopeFilter(
+    actor: AuthenticatedUser,
+    requested: string | undefined,
+  ): Prisma.LedgerEntryWhereInput {
     if (actor.permissions.has("payout.view_any")) {
-      return requested ?? null;
+      return requested === undefined ? {} : { partnerId: requested };
     }
     if (actor.permissions.has("payout.view_own")) {
-      return actor.partnerId ?? "__no_partner__";
+      return actor.partnerId === null ? { partnerId: { in: [] } } : { partnerId: actor.partnerId };
     }
     throw new ForbiddenException("Insufficient permissions");
   }

@@ -95,6 +95,12 @@ enum LedgerEntryType {
   payout
 }
 
+enum ConsentType {
+  terms
+  privacy
+  marketing
+}
+
 enum AuditAction {
   partner_approved
   partner_suspended
@@ -126,8 +132,27 @@ model User {
   permissionGrants PermissionGrant[]
   auditEntries     AuditLog[]        @relation("AuditActor")
   approvedCommissions Commission[]   @relation("CommissionApprover")
+  consentRecords   ConsentRecord[]
 
   @@index([role])
+}
+
+/// Append-only record of a consent decision captured at registration (or later).
+/// Never updated — a change of mind is a new record.
+model ConsentRecord {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @db.Uuid
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       ConsentType
+  granted    Boolean
+  /// Version of the policy text the user agreed to.
+  version    String
+  ip         String?     @db.VarChar(45)
+  userAgent  String?     @db.VarChar(512)
+  occurredAt DateTime    @default(now())
+
+  @@index([userId])
+  @@index([type])
 }
 
 /// Per-user permission overrides on top of the role defaults. Empty today —
@@ -205,11 +230,29 @@ model Transaction {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
-  commissions Commission[]
+  commissions    Commission[]
+  ingestedEvents IngestedEvent[]
 
+  /// Makes re-importing the same source order a no-op. NULL externalRef is
+  /// allowed to repeat, since a manual entry without an external id is its own
+  /// distinct event.
   @@unique([source, externalRef])
   @@index([referralId])
   @@index([occurredAt])
+}
+
+/// Idempotency ledger for ingestion. A webhook/API delivery carrying an event id
+/// we have already processed is recorded here and never applied twice.
+model IngestedEvent {
+  id              String            @id @default(uuid()) @db.Uuid
+  source          TransactionSource
+  externalEventId String
+  transactionId   String?           @db.Uuid
+  transaction     Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  processedAt     DateTime          @default(now())
+
+  @@unique([source, externalEventId])
+  @@index([transactionId])
 }
 
 /// An immutable version of a commission plan. Editing creates a new version

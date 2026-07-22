@@ -103,8 +103,13 @@ rules, view financial reports, view audit logs, view customer clinical informati
 transactions that are not theirs. Partner-owned records are scoped by
 `canViewPartnerOwnedResource`.
 
-**Customers** never see commissions or partner administration. 🟡 _Registration is modeled as a
-public, unauthenticated action rather than a permission (no session exists yet)._
+**Customers** never see commissions or partner administration.
+
+🟢 **Customer registration is a public, unauthenticated action for the MVP** — deliberately not a
+permission, since no session exists at sign-up. It is protected by: per-IP **rate limiting**,
+strict schema **validation**, mandatory **consent capture** (append-only records for terms,
+privacy, and marketing), and **abuse prevention** — the response is identical whether or not the
+email is already registered, so the endpoint cannot be used to enumerate accounts.
 
 > There is deliberately **no permission for customer clinical information** — the platform holds no
 > clinical data at all, so such access is denied by absence rather than by rule.
@@ -277,12 +282,15 @@ Milestone detail lives in [docs/milestones.md](docs/milestones.md). Summary:
 4. 🟢 **M2 — Backend API foundation** (done): NestJS + Postgres/Prisma, JWT auth, RBAC guards,
    partner/referral/transaction/commission/ledger/audit modules, in-process event bus, OpenAPI,
    Docker, migrations, seed
-5. ⏳ **M3 — Admin dashboard** (Next.js: review/approval queues, partner management, reporting)
-6. ⏳ **M4 — Partner mobile app** (Expo: links, referrals, earnings)
-7. ⏳ **M5 — Auth & RBAC** (partner vs. administrator)
-8. ⏳ **M6 — Commission engine & payouts** (versioned rules, statements, payout integration)
-9. ⏳ **M7 — Infrastructure & deployment (AWS)**
-10. ⏳ **M8 — Security & data-protection hardening** (before any sensitive customer data at scale)
+5. 🟢 **M2.1 — Database validation & hardening** (done): schema verified against real PostgreSQL,
+   42 integration tests, idempotent ingestion, public customer registration with consent capture
+   and rate limiting, production-only Docker runtime
+6. ⏳ **M3 — Admin dashboard** (Next.js: review/approval queues, partner management, reporting)
+7. ⏳ **M4 — Partner mobile app** (Expo: links, referrals, earnings)
+8. ⏳ **M5 — Auth & RBAC** (partner vs. administrator)
+9. ⏳ **M6 — Commission engine & payouts** (versioned rules, statements, payout integration)
+10. ⏳ **M7 — Infrastructure & deployment (AWS)**
+11. ⏳ **M8 — Security & data-protection hardening** (before any sensitive customer data at scale)
 
 ## Future ideas
 
@@ -335,10 +343,8 @@ commission model, attribution, and payout mechanics are now resolved — see Pro
 4. 🔴 **Which users get mobile vs. admin**, and notification requirements.
 5. 🔴 **Official branding** — logo, colors, fonts, voice, required disclaimers.
 6. 🔴 **Fraud/duplicate detection** — self-referral and cross-partner rules.
-7. 🟡 **Customer registration is modeled as a public, unauthenticated action** rather than a
-   permission (no session exists at sign-up). Confirm.
-8. 🔴 **Verify the initial migration against a live PostgreSQL** — the SQL is generated offline and
-   has not yet been applied to a real server. _(First task once a database is available.)_
+7. 🔴 **Consent policy versions** — who owns the terms/privacy text and its version string, and
+   what happens when it changes (re-consent prompt?).
 
 ## Integrations
 

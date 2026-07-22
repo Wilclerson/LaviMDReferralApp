@@ -3,6 +3,7 @@ import {
   createPartnerSchema,
   createReferralSchema,
   createTransactionSchema,
+  registerCustomerSchema,
 } from "@lavimd/shared";
 import type { ZodTypeAny } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
@@ -20,6 +21,7 @@ const SCHEMA_SOURCES: Record<string, ZodTypeAny> = {
   CreateReferral: createReferralSchema,
   CreateTransaction: createTransactionSchema,
   CreateCommissionPlan: createCommissionPlanSchema,
+  RegisterCustomer: registerCustomerSchema,
 };
 
 /**

@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.spec.ts", "test/**/*.spec.ts"],
+    // Database-backed tests have their own config and runner.
+    exclude: ["**/node_modules/**", "**/dist/**", "test/integration/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
