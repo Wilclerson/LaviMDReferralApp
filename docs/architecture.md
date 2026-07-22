@@ -53,6 +53,9 @@ Partner ──shares link/code──▶ Referral (attribution)
 
 The domain core for the affiliate model. Owns:
 
+- **Authorization** — the four roles (Super Admin, Administrator, Partner, Customer), the
+  permission catalog, `can()` (deny-by-default), and `canViewPartnerOwnedResource()` enforcing
+  partner owner-scoping. Enforced server-side; client permissions are never trusted.
 - **Partner** — categories (personal trainer … influencer), status machine, referral codes,
   and `isPartnerEligibleForCommission` (active-only).
 - **Referral** — marketing attribution with a status machine

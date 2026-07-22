@@ -54,6 +54,53 @@ for this system.
 
 These are hard product invariants — see [Things that must never change](#things-that-must-never-change).
 
+## Roles & authorization matrix
+
+🟢 Four roles. **All authorization is role-based and enforced server-side, deny-by-default.**
+Client permissions are never trusted — the UI may render from these rules, but every decision is
+re-checked on the server. Implemented in `packages/shared/src/domain/authorization.ts`.
+
+| Capability                                            | Super Admin | Administrator | Partner | Customer |
+| ----------------------------------------------------- | :---------: | :-----------: | :-----: | :------: |
+| Full system access                                    |     ✅      |      ❌       |   ❌    |    ❌    |
+| Manage administrators                                 |     ✅      |      ❌       |   ❌    |    ❌    |
+| Create/manage Super Admins                            |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure system & security settings                  |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure integrations                                |     ✅      |      ❌       |   ❌    |    ❌    |
+| View audit logs                                       |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure commission plans                            |     ✅      |      ❌       |   ❌    |    ❌    |
+| Configure payout settings                             |     ✅      |      ❌       |   ❌    |    ❌    |
+| Manage partner categories                             |     ✅      |      ❌       |   ❌    |    ❌    |
+| Approve / suspend partners                            |     ✅      |      ✅       |   ❌    |    ❌    |
+| Manage referrals / view any referral                  |     ✅      |      ✅       |   ❌    |    ❌    |
+| Review transactions / view any transaction            |     ✅      |      ✅       |   ❌    |    ❌    |
+| Approve commissions / view any commission             |     ✅      |      ✅       |   ❌    |    ❌    |
+| Create payout batches / view any payout               |     ✅      |      ✅       |   ❌    |    ❌    |
+| Manage education, marketing assets, announcements     |     ✅      |      ✅       |   ❌    |    ❌    |
+| View financial reports                                |     ✅      |     ✅ ⚠️     |   ❌    |    ❌    |
+| Edit own profile / upload own documents               |     ✅      |       —       |   ✅    |    ❌    |
+| View education / complete certifications              |     ✅      |      ✅       |   ✅    |   ✅¹    |
+| Access marketing materials                            |     ✅      |      ✅       |   ✅    |    ❌    |
+| View **own** referrals / commissions / payouts / txns |     ✅      |       —       |   ✅    |    ❌    |
+| Generate referral links & QR codes                    |     ✅      |       —       |   ✅    |    ❌    |
+| Complete onboarding / manage own account              |     ✅      |      ✅       |   ✅    |    ✅    |
+
+¹ Customers may view educational content; certifications are partner-only.
+⚠️ **Engineering inference:** Administrators are granted `financial_report.view` because they
+review transactions, approve commissions, and create payout batches. Only partners were explicitly
+barred. Flag if this should be Super Admin only.
+
+**Partners may never:** view another partner's information, approve commissions, modify commission
+rules, view financial reports, view audit logs, view customer clinical information, or view
+transactions that are not theirs. Partner-owned records are scoped by
+`canViewPartnerOwnedResource`.
+
+**Customers** never see commissions or partner administration. 🟡 _Registration is modeled as a
+public, unauthenticated action rather than a permission (no session exists yet)._
+
+> There is deliberately **no permission for customer clinical information** — the platform holds no
+> clinical data at all, so such access is denied by absence rather than by rule.
+
 ## Business rules
 
 - 🟢 Partners are non-medical and act only as described above.
@@ -69,7 +116,8 @@ These are hard product invariants — see [Things that must never change](#thing
 - 🟢 Only **active** partners accrue commission on new eligible transactions.
 - 🟢 Attribution is **Last-Click** with a **30-day** window; the newest referral within the window
   owns attribution (details under [Referral & attribution rules](#referral--attribution-rules)).
-- 🔴 Authorization matrix: exactly which roles can create/read/approve/reject/reverse each entity.
+- 🟢 Access is governed by the four-role [authorization matrix](#roles--authorization-matrix),
+  enforced server-side and deny-by-default.
 
 ## Eligible transactions
 
@@ -239,19 +287,26 @@ A dated log of decisions promoted to 🟢. (Append-only; do not rewrite history.
   automatic payouts in MVP, admin-approved, immutable ledger); a transaction **ingestion
   abstraction** (manual/CSV/REST/webhook; MVP = manual admin approval; future: WooCommerce, Hint,
   Stripe); and an **event-driven** design over a simple in-process bus with a 9-event catalog.
+- **2026-07-21** — **Authorization matrix confirmed:** four roles (Super Admin, Administrator,
+  Partner, Customer) with an explicit permission catalog, encoded in
+  `packages/shared/src/domain/authorization.ts`. Authorization is role-based, **server-side, and
+  deny-by-default**; client permissions are never trusted. Administrators cannot change
+  system/security settings or create Super Admins; partners can only ever see their own data.
 
 ## Open business questions
 
 Ordered roughly by how much they block upcoming work. _(The eligible-transaction definition,
 commission model, attribution, and payout mechanics are now resolved — see Product decisions.)_
 
-1. 🔴 **Authorization matrix** — partner vs. admin capabilities. _(Blocks M5, shapes M2.)_
-2. 🔴 **Clawback policy** — handling refunds/chargebacks after approval/payment. _(Shapes M6.)_
-3. 🔴 **Legal** — FTC endorsement/influencer disclosure and healthcare-marketing review.
-4. 🔴 **Payout provider & tax** — ACH/PayPal provider selection and 1099 handling. _(Shapes M6.)_
-5. 🔴 **Which users get mobile vs. admin**, and notification requirements.
-6. 🔴 **Official branding** — logo, colors, fonts, voice, required disclaimers.
-7. 🔴 **Fraud/duplicate detection** — self-referral and cross-partner rules.
+1. 🔴 **Clawback policy** — handling refunds/chargebacks after approval/payment. _(Shapes M6.)_
+2. 🔴 **Legal** — FTC endorsement/influencer disclosure and healthcare-marketing review.
+3. 🔴 **Payout provider & tax** — ACH/PayPal provider selection and 1099 handling. _(Shapes M6.)_
+4. 🔴 **Which users get mobile vs. admin**, and notification requirements.
+5. 🔴 **Official branding** — logo, colors, fonts, voice, required disclaimers.
+6. 🔴 **Fraud/duplicate detection** — self-referral and cross-partner rules.
+7. 🔴 **Confirm two authorization inferences** — Administrator access to financial reports, and
+   registration modeled as a public action. See
+   [Roles & authorization matrix](#roles--authorization-matrix).
 
 ## Integrations
 
@@ -293,6 +348,11 @@ Invariants. Changing any of them requires an explicit, recorded decision (a new 
   immutable, append-only ledger record.
 - 🟢 **No PHI** in logs, URLs, analytics, error payloads, or the domain model; customers are
   referenced only by opaque, non-PHI identifiers.
+- 🟢 **All authorization is role-based and enforced server-side, deny-by-default. Client-supplied
+  permissions, roles, or capability flags are never trusted.**
+- 🟢 **Partners can only ever see their own data** (referrals, transactions, commissions, payouts);
+  they never see another partner's information, financial reports, or audit logs.
+- 🟢 **Administrators can never change system/security settings or create Super Admins.**
 - 🟢 **No secrets or credentials committed to the repository.**
 - 🟢 **Untrusted input is validated at the boundary** (shared Zod schemas) before use.
 - 🟢 **Shared types are the single contract** between client and server.

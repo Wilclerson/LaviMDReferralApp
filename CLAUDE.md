@@ -90,8 +90,15 @@ All five must pass. This mirrors CI ([.github/workflows/ci.yml](.github/workflow
 - **Least privilege** everywhere: CI permissions, cloud IAM, database roles, and API authorization.
 - **Validate and sanitize** all external input; use parameterized queries (Prisma) — never string-built SQL.
 - **Dependencies:** keep them current; review before adding; prefer well-maintained, typed packages.
-- **AuthN/AuthZ** (M5): every endpoint is deny-by-default; authorization is checked per action and
+- **AuthN/AuthZ**: every endpoint is deny-by-default; authorization is checked per action and
   per record, not just per route.
+- **Authorization is role-based and enforced server-side. Never trust client permissions.** Roles,
+  permissions, and record scoping come from `@lavimd/shared` (`can`, `canViewPartnerOwnedResource`);
+  the client may render UI from them, but every decision is re-checked on the server. Never accept a
+  role, permission list, or capability flag from a request body/header as authoritative.
+- **Partner data is strictly owner-scoped** — a partner may only ever read their own referrals,
+  transactions, commissions, and payouts. Every list/detail query filters by the authenticated
+  partner, never by a client-supplied id alone.
 - **Never** disable security tooling or commit around a security check.
 
 ## Testing requirements

@@ -36,6 +36,15 @@ broken state, and lint/test failures are never ignored.
 - **Event catalog** (9 events) + `EventPublisher` contract for a simple in-process bus.
 - 97 tests at 100% coverage.
 
+## ✅ Milestone 1.8 — Authorization matrix (RBAC)
+
+- Four roles (Super Admin, Administrator, Partner, Customer) with an explicit permission catalog
+  in `@lavimd/shared`: `can()` (deny-by-default), `canAll()`, `isAdminRole()`, and
+  `canViewPartnerOwnedResource()` for partner owner-scoping.
+- Administrators explicitly cannot change system/security settings or create Super Admins;
+  partners can only ever see their own referrals, transactions, commissions, and payouts.
+- 110 tests at 100% coverage, asserting every "may" and "may never" in the matrix.
+
 ## ⏳ Milestone 2 — Backend API foundation
 
 - `apps/api` (NestJS): config module, health/readiness endpoints, structured logging.
@@ -60,10 +69,11 @@ broken state, and lint/test failures are never ignored.
 - Shared types/validation from `@lavimd/shared`.
 - Device/e2e testing strategy.
 
-## ⏳ Milestone 5 — Auth & RBAC
+## ⏳ Milestone 5 — Authentication & session management
 
-- Authentication (partner / administrator), session/token strategy, role-based and per-record
-  authorization (a partner sees only their own data).
+- Authentication for all four roles, session/token strategy, password/credential handling.
+- Wires the M1.8 authorization matrix into guards/interceptors; per-record enforcement everywhere.
+- Audit logging of administrative actions (including attribution overrides).
 
 ## ⏳ Milestone 6 — Commission engine & payouts
 
