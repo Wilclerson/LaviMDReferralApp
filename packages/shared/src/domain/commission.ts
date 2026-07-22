@@ -32,15 +32,17 @@ export type CommissionStatus = z.infer<typeof commissionStatusSchema>;
 export const createCommissionSchema = z.object({
   partnerId: z.string().uuid(),
   referralId: z.string().uuid(),
-  /** Opaque, non-PHI reference to the eligible transaction in LaviMD. */
-  transactionRef: z.string().min(1).max(128),
+  /** The eligible transaction this commission is earned on. */
+  transactionId: z.string().uuid(),
+  /** The exact commission-plan version used, and the level within it. */
+  planId: z.string().uuid(),
+  planVersion: z.number().int().min(1),
+  level: z.number().int().min(1).max(10),
   /** The amount the commission is computed from, in minor units. */
   eligibleAmountMinor: moneyMinorSchema,
   /** The computed commission amount, in minor units. */
   commissionAmountMinor: moneyMinorSchema,
   currency: currencySchema,
-  /** Identifier of the versioned commission rule set used for this calculation. */
-  ruleVersion: z.string().min(1).max(64),
 });
 export type CreateCommissionInput = z.input<typeof createCommissionSchema>;
 export type CreateCommission = z.infer<typeof createCommissionSchema>;

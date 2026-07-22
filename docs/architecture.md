@@ -57,8 +57,17 @@ The domain core for the affiliate model. Owns:
   and `isPartnerEligibleForCommission` (active-only).
 - **Referral** — marketing attribution with a status machine
   (`pending → signed_up → converted`, plus `expired`/`cancelled`).
+- **Transaction** — order records (source: manual/csv/api/webhook) + `evaluateTransactionEligibility`
+  encoding the 8-point eligible-transaction rule (settled, not refunded/charged-back/cancelled,
+  valid attribution, active partner).
+- **Commission plans** — versioned, multi-level, `percentage | flat | hybrid`;
+  `computeRuleCommissionMinor` (rates/amounts are data, never hard-coded).
 - **Commission** — status machine (`pending_review → approved → paid`, plus `rejected`/`reversed`);
   `isCommissionPayable` is true only for administrator-`approved` commissions.
+- **Attribution** — `resolveLastClickAttribution` (Last-Click, 30-day window, newest wins).
+- **Payout** — methods ACH/PayPal/Manual, admin-approved status machine, monthly, $50 minimum.
+- **Ledger** — immutable, append-only signed entries; source of truth for partner balances.
+- **Events** — the 9-event catalog + `EventPublisher` contract for the backend's in-process bus.
 - **Money** — integer minor-unit money + `computeCommissionMinor(amount, rateBasisPoints)`
   (the rate is an input; rates are never hard-coded).
 - A generic `createStatusMachine` helper and cross-cutting utilities (e.g. pagination).

@@ -23,15 +23,28 @@ broken state, and lint/test failures are never ignored.
   **Partner** (9 non-medical categories, status machine, referral codes), **Referral** (marketing
   attribution funnel), **Commission** (payable only after administrator approval), and **Money**
   (integer minor units + basis-point commission computation).
-- Generic `createStatusMachine` helper; 50 tests at 100% coverage.
+- Generic `createStatusMachine` helper.
 - Updated PROJECT.md, architecture, and SECURITY to the marketing-platform model.
+
+## ✅ Milestone 1.7 — Affiliate business rules in the domain
+
+- **Transaction** + `evaluateTransactionEligibility` encoding the 8-point eligible-transaction rule.
+- **Commission plans**: versioned, multi-level, `percentage | flat | hybrid` (rates as data, never
+  hard-coded); `computeRuleCommissionMinor`.
+- **Attribution**: `resolveLastClickAttribution` (Last-Click, 30-day window, newest wins).
+- **Payout** (ACH/PayPal/Manual, admin-approved, monthly, $50 minimum) + immutable **Ledger**.
+- **Event catalog** (9 events) + `EventPublisher` contract for a simple in-process bus.
+- 97 tests at 100% coverage.
 
 ## ⏳ Milestone 2 — Backend API foundation
 
 - `apps/api` (NestJS): config module, health/readiness endpoints, structured logging.
-- PostgreSQL via Prisma; schema + migrations for partners, referrals, transactions, commissions.
+- PostgreSQL via Prisma; schema + migrations for partners, referrals, transactions, commissions,
+  commission plans, payouts, and the ledger.
 - CRUD + **status-transition enforcement** using the shared state machines; administrator
-  approval flow for commissions.
+  approval flow for commissions and payouts.
+- **In-process event bus** implementing `EventPublisher`; publishers/subscribers for the domain events.
+- **Transaction ingestion abstraction** (manual/CSV/REST/webhook) — MVP: manual admin entry.
 - Request validation via shared Zod schemas; error handling; OpenAPI docs.
 - Unit + e2e tests; Dockerfile for the API.
 

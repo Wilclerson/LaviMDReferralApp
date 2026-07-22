@@ -67,41 +67,86 @@ These are hard product invariants — see [Things that must never change](#thing
 - 🟢 A **commission** moves `pending_review → approved → paid`, with `rejected` and `reversed`
   (clawback) as defined exits. It becomes payable **only** at `approved`.
 - 🟢 Only **active** partners accrue commission on new eligible transactions.
-- 🟡 Attribution is single-partner per referral; last-touch vs. first-touch is TBD (see open questions).
+- 🟢 Attribution is **Last-Click** with a **30-day** window; the newest referral within the window
+  owns attribution (details under [Referral & attribution rules](#referral--attribution-rules)).
 - 🔴 Authorization matrix: exactly which roles can create/read/approve/reject/reverse each entity.
 
-## Commission rules
+## Eligible transactions
 
-> Structure is 🟢 confirmed; **amounts and payout mechanics are 🔴 open** — no specific rate or
-> payout is implemented. `computeCommissionMinor(amount, rateBasisPoints)` takes the rate as an
-> input; rates come from a versioned rule set, never hard-coded.
+🟢 A transaction is **eligible** for commission only when **all** of the following hold — and it
+is **not** merely a lead:
+
+1. It is a completed purchase that originated from a valid referral.
+2. Payment has successfully **settled**.
+3. It has **not** been refunded.
+4. It has **not** been charged back.
+5. It has **not** been cancelled.
+6. The referral **attribution is valid**.
+7. The **partner is active**.
+8. An **administrator approves** the commission.
+
+Conditions 1–7 are objective and evaluated by `evaluateTransactionEligibility` in
+`packages/shared`; condition 8 is the final, separate gate (the commission state machine). **No
+commission is earned until an administrator approves it.**
+
+## Commission rules & plans
 
 - 🟢 Commission is granted **only on administrator-approved eligible transactions**.
-- 🟢 Money is represented in integer **minor units** (e.g. cents) with an ISO-4217 currency —
-  never floats.
-- 🟡 Each commission records the **rule-set version** used, so rate changes never retroactively
-  alter commissions already computed.
-- 🟡 Every commission is **auditable**: eligible amount, rate/rule version, computed amount,
-  approver, and timestamps are recorded.
-- 🔴 **Commission model & rates**: flat per transaction? percentage (bps)? tiered by category/volume?
-- 🔴 **Eligible transaction**: the precise definition of what qualifies (product, first purchase
-  only?, refunds excluded?).
-- 🔴 **Attribution window**: how long after invite/sign-up a transaction still attributes.
-- 🔴 **Payout**: cadence, minimum threshold, method/integration, tax handling (e.g. 1099).
-- 🔴 **Clawback**: handling when an approved/paid transaction is later refunded/reversed
-  (state machine supports `reversed`; policy is open).
+- 🟢 Administrators can create **multiple commission plans**. Every plan is **versioned**; earned
+  commissions reference the exact plan version used, so rate changes never apply retroactively.
+- 🟢 Plans support multiple **levels** (e.g. Level 1 = 10%, Level 2 = 3%).
+- 🟢 Each level's calculation type is **percentage**, **flat amount**, or **hybrid** (flat +
+  percentage). **Rates/amounts are always data — never hard-coded.** `computeRuleCommissionMinor`
+  takes the rule (rate in basis points / flat in minor units) as input.
+- 🟢 Money is integer **minor units** with an ISO-4217 currency — never floats.
+- 🟢 Every commission is **auditable**: eligible amount, plan id + version + level, computed
+  amount, approver, and timestamps.
+- 🟡 Example starter plan (illustrative, admin-configurable): L1 10%, L2 3%.
+- 🔴 **Clawback policy** when an approved/paid transaction is later refunded/reversed (the state
+  machine supports `reversed`; the operational policy is open).
 - 🔴 **Legal review**: influencer/endorsement disclosure (FTC) and any healthcare-marketing
-  constraints (e.g. anti-kickback if federal healthcare-program dollars are ever involved).
-  **Needs legal sign-off before launch.**
+  constraints. **Needs legal sign-off before launch.**
 
-## Referral rules
+## Referral & attribution rules
 
-- 🟢 A referral is a marketing **attribution**, not a clinical event.
-- 🟢 Fields at creation (current schema): `partnerId`, `referralCode`, `channel`
-  (`link | code | content | invite`, default `link`); optional opaque `customerRef` set on sign-up.
-- 🟢 `referralCode` is 6–20 uppercase alphanumerics.
+- 🟢 A referral is a marketing **attribution**, not a clinical event. Fields at creation:
+  `partnerId`, `referralCode`, `channel` (`link | code | content | invite`, default `link`);
+  optional opaque `customerRef` set on sign-up. `referralCode` is 6–20 uppercase alphanumerics.
+- 🟢 **Attribution model: Last Click.** Cookie duration **30 days**. If another referral occurs
+  within 30 days, the **newest referral owns attribution** (`resolveLastClickAttribution`).
+- 🟢 Administrators may **manually override** attribution. **All overrides must be audited.**
 - 🔴 Duplicate/fraud detection (same customer across partners, self-referral).
 - 🔴 Notification rules (who is notified on each transition, via which channel).
+
+## Payouts
+
+- 🟢 **Frequency: monthly.**
+- 🟢 **Minimum balance: $50** (`DEFAULT_MINIMUM_PAYOUT_BALANCE_MINOR = 5000`; policy-configurable).
+- 🟢 **Methods: ACH, PayPal, Manual.**
+- 🟢 **No automatic payouts in MVP.** Every payout **requires administrator approval**.
+- 🟢 Every payout creates an **immutable, append-only ledger record** (`LedgerEntry`); the ledger
+  is the source of truth for partner balances.
+- 🔴 Tax handling (e.g. 1099) and payout-provider selection (see Integrations).
+
+## Transaction ingestion
+
+- 🟢 Ingestion is behind an **abstraction layer** supporting: **manual import, CSV import, REST
+  API, and webhooks** (`TransactionSource = manual | csv | api | webhook`).
+- 🟢 **MVP:** transactions are entered/approved **manually in the Admin Dashboard**.
+- 🟡 **Future integrations:** WooCommerce, Hint, Stripe (adapters implement the same ingestion
+  contract). See [Integrations](#integrations).
+
+## Event-driven architecture
+
+- 🟢 The backend is **event-driven**: business logic reacts to domain events rather than directly
+  calling unrelated services.
+- 🟢 Events are published through a **simple internal in-process event bus** — no external broker
+  in MVP (deliberately not overengineered).
+- 🟢 Event catalog (`DOMAIN_EVENT_TYPES` in `packages/shared`): `ReferralCreated`,
+  `ReferralClicked`, `ReferralRegistered`, `PurchaseCompleted`, `CommissionPending`,
+  `CommissionApproved`, `CommissionPaid`, `PayoutCreated`, `PayoutCompleted`.
+- 🟢 The `EventPublisher` contract lives in `packages/shared`; the bus implementation lands in the
+  backend (M2).
 
 ## Branding
 
@@ -157,14 +202,16 @@ Milestone detail lives in [docs/milestones.md](docs/milestones.md). Summary:
 
 1. 🟢 **M1 — Monorepo foundation & CI/CD** (done)
 2. 🟢 **M1.5 — Domain remodel to the affiliate/partner-network model** (done)
-3. ⏳ **M2 — Backend API foundation** (NestJS, Postgres/Prisma: partners, referrals, transactions,
-   commissions, admin approval)
-4. ⏳ **M3 — Admin dashboard** (Next.js: review/approval queues, partner management, reporting)
-5. ⏳ **M4 — Partner mobile app** (Expo: links, referrals, earnings)
-6. ⏳ **M5 — Auth & RBAC** (partner vs. administrator)
-7. ⏳ **M6 — Commission engine & payouts** (versioned rules, statements, payout integration)
-8. ⏳ **M7 — Infrastructure & deployment (AWS)**
-9. ⏳ **M8 — Security & data-protection hardening** (before any sensitive customer data at scale)
+3. 🟢 **M1.7 — Affiliate rules in the domain** (done): eligibility, commission plans, attribution,
+   payouts, ledger, and the event catalog in `packages/shared`
+4. ⏳ **M2 — Backend API foundation** (NestJS, Postgres/Prisma: partners, referrals, transactions,
+   commissions, admin approval, in-process event bus, ingestion abstraction)
+5. ⏳ **M3 — Admin dashboard** (Next.js: review/approval queues, partner management, reporting)
+6. ⏳ **M4 — Partner mobile app** (Expo: links, referrals, earnings)
+7. ⏳ **M5 — Auth & RBAC** (partner vs. administrator)
+8. ⏳ **M6 — Commission engine & payouts** (versioned rules, statements, payout integration)
+9. ⏳ **M7 — Infrastructure & deployment (AWS)**
+10. ⏳ **M8 — Security & data-protection hardening** (before any sensitive customer data at scale)
 
 ## Future ideas
 
@@ -185,19 +232,26 @@ A dated log of decisions promoted to 🟢. (Append-only; do not rewrite history.
   links, invite customers, and earn commission on **administrator-approved eligible transactions**.
   No provider-to-provider or clinical referrals are modeled. The clinical domain from M1 was
   replaced with a Partner → Referral → Transaction → Commission → Payout model (M1.5).
+- **2026-07-21** — **Affiliate rules confirmed and encoded in `packages/shared`:** the 8-point
+  eligible-transaction definition; commission plans (percentage/flat/hybrid, multi-level, versioned;
+  rates never hard-coded); **Last-Click** attribution with a **30-day** window (newest wins;
+  admin overrides audited); payouts (**monthly**, **$50** minimum, **ACH/PayPal/Manual**, no
+  automatic payouts in MVP, admin-approved, immutable ledger); a transaction **ingestion
+  abstraction** (manual/CSV/REST/webhook; MVP = manual admin approval; future: WooCommerce, Hint,
+  Stripe); and an **event-driven** design over a simple in-process bus with a 9-event catalog.
 
 ## Open business questions
 
-Ordered roughly by how much they block upcoming work.
+Ordered roughly by how much they block upcoming work. _(The eligible-transaction definition,
+commission model, attribution, and payout mechanics are now resolved — see Product decisions.)_
 
-1. 🔴 **Eligible-transaction definition** — what exactly qualifies for commission. _(Blocks M2 model.)_
-2. 🔴 **Commission model & rates**, currency, and any category/tier differences. _(Blocks M6.)_
-3. 🔴 **Payout** mechanics — cadence, threshold, method/integration, tax. _(Blocks M6.)_
-4. 🔴 **Attribution model & window** — first- vs. last-touch, and expiry. _(Shapes M2.)_
-5. 🔴 **Authorization matrix** — partner vs. admin capabilities. _(Blocks M5, shapes M2.)_
-6. 🔴 **Legal** — FTC endorsement/influencer disclosure and healthcare-marketing review.
-7. 🔴 **Which users get mobile vs. admin**, and notification requirements.
-8. 🔴 **Official branding** — logo, colors, fonts, voice, required disclaimers.
+1. 🔴 **Authorization matrix** — partner vs. admin capabilities. _(Blocks M5, shapes M2.)_
+2. 🔴 **Clawback policy** — handling refunds/chargebacks after approval/payment. _(Shapes M6.)_
+3. 🔴 **Legal** — FTC endorsement/influencer disclosure and healthcare-marketing review.
+4. 🔴 **Payout provider & tax** — ACH/PayPal provider selection and 1099 handling. _(Shapes M6.)_
+5. 🔴 **Which users get mobile vs. admin**, and notification requirements.
+6. 🔴 **Official branding** — logo, colors, fonts, voice, required disclaimers.
+7. 🔴 **Fraud/duplicate detection** — self-referral and cross-partner rules.
 
 ## Integrations
 
@@ -205,9 +259,9 @@ Ordered roughly by how much they block upcoming work.
 
 - **Auth / identity** — partner and administrator sign-in (M5).
 - **Email / SMS** — invites, transaction/commission notifications, payout statements.
-- **Payments / payouts** — 🔴 partner commission payouts (e.g. a payouts provider). Selected in M6.
-- **LaviMD core / commerce** — source of the **eligible transactions** that drive commissions;
-  integration shape is 🔴 open (event feed vs. API vs. manual admin entry).
+- **Payments / payouts** — 🟢 methods are ACH, PayPal, Manual; 🔴 provider selection in M6.
+- **Commerce / transaction sources** — 🟢 ingestion abstraction accepts manual, CSV, REST API, and
+  webhook sources. MVP is manual admin entry; 🟡 future adapters: **WooCommerce, Hint, Stripe**.
 - **Observability** — logging/metrics/error tracking (M7).
 
 ## APIs
@@ -231,7 +285,12 @@ Invariants. Changing any of them requires an explicit, recorded decision (a new 
 - 🟢 **Commission is paid only on administrator-approved eligible transactions** — never
   automatically on click, sign-up, or an unreviewed transaction.
 - 🟢 **Money is stored in integer minor units** with an explicit currency; never floats.
-- 🟢 **Commission calculations are versioned and never retroactively altered** once earned.
+- 🟢 **Commission calculations are versioned and never retroactively altered** once earned;
+  commission rates/amounts are never hard-coded.
+- 🟢 **Attribution is Last-Click within the configured window** (default 30 days); administrator
+  overrides are always audited.
+- 🟢 **Payouts require administrator approval and are never automatic**; every payout writes an
+  immutable, append-only ledger record.
 - 🟢 **No PHI** in logs, URLs, analytics, error payloads, or the domain model; customers are
   referenced only by opaque, non-PHI identifiers.
 - 🟢 **No secrets or credentials committed to the repository.**

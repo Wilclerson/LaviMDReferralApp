@@ -15,11 +15,13 @@ const NOW = "2026-07-21T12:00:00.000Z";
 const baseInput = {
   partnerId: VALID_UUID,
   referralId: OTHER_UUID,
-  transactionRef: "txn_abc123",
+  transactionId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  planId: "2c5ea4c0-4067-11e9-8bad-9b1deb4d3b7d",
+  planVersion: 1,
+  level: 1,
   eligibleAmountMinor: 5000,
   commissionAmountMinor: 500,
   currency: "USD",
-  ruleVersion: "v1",
 };
 
 describe("createCommissionSchema", () => {
@@ -33,8 +35,14 @@ describe("createCommissionSchema", () => {
     ).toBe(false);
   });
 
-  it("rejects a missing rule version", () => {
-    expect(createCommissionSchema.safeParse({ ...baseInput, ruleVersion: "" }).success).toBe(false);
+  it("rejects a missing/invalid plan version", () => {
+    expect(createCommissionSchema.safeParse({ ...baseInput, planVersion: 0 }).success).toBe(false);
+  });
+
+  it("rejects a non-UUID transaction id", () => {
+    expect(createCommissionSchema.safeParse({ ...baseInput, transactionId: "nope" }).success).toBe(
+      false,
+    );
   });
 });
 
