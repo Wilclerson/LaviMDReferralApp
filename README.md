@@ -6,6 +6,18 @@ mobile app, sharing a single TypeScript codebase.
 > **Status:** Milestone 1 — monorepo foundation and CI/CD are in place. Application code
 > (API, admin, mobile) lands in subsequent milestones. See [docs/milestones.md](docs/milestones.md).
 
+## Key documents
+
+Read these before contributing:
+
+- **[PROJECT.md](PROJECT.md)** — the living **product** document: vision, target users, business /
+  commission / referral rules, branding, roadmap, product decisions, and open questions.
+- **[CLAUDE.md](CLAUDE.md)** — the permanent **engineering** guide: coding standards, architecture
+  principles, security/testing/accessibility/performance requirements, and the Git & green-gate
+  workflow. **Read it first every session.**
+- [CONTRIBUTING.md](CONTRIBUTING.md) — day-to-day contribution steps.
+- [SECURITY.md](SECURITY.md) — security posture and the (deferred) HIPAA compliance boundary.
+
 ## Architecture at a glance
 
 This is a **pnpm + Turborepo monorepo** written in TypeScript end to end.
